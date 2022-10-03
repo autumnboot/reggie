@@ -9,6 +9,7 @@ import com.reggie.utils.ValidateCodeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RestController
@@ -23,6 +25,8 @@ import java.util.Map;
 public class UserController {
     @Autowired
     private UserService userService;
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     //发送短信验证码
     @PostMapping("/sendMsg")
@@ -36,7 +40,10 @@ public class UserController {
             //调用短信服务API发送短信
             //SMSUtils.sendMessage("瑞吉外卖","",phone,code);
             //保存验证码
-            session.setAttribute(phone,code);
+            //session.setAttribute(phone,code);
+
+            //优化：将验证码存进Redis，并设置有效期5分钟
+            redisTemplate.opsForValue().set(phone,code,5, TimeUnit.MINUTES);
             return R.success("验证码发送成功！");
         }
         return R.error("验证码发送失败！");
@@ -51,8 +58,14 @@ public class UserController {
         String phone = (String) map.get("phone");
         //获取用户输入的验证码
         String code = (String) map.get("code");
+
+
         //获取保存在session的验证码
-        String codeInSession = (String) session.getAttribute(phone);
+        //String codeInSession = (String) session.getAttribute(phone);
+
+        //优化：Redis中取出验证码
+        String codeInSession = (String) redisTemplate.opsForValue().get(phone);
+
         //验证码比对
         if(codeInSession != null && codeInSession.equals(code)){
             //判断当前数据库中是否有该用户信息
@@ -67,6 +80,10 @@ public class UserController {
                 userService.save(user);
             }
             session.setAttribute("user", user.getId());
+
+            //优化：登录成功删除验证码
+            redisTemplate.delete(phone);
+
             return R.success(user);
         }
         return R.error("登录失败！");
