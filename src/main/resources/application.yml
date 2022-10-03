@@ -11,6 +11,9 @@ spring:
       username: root
       password: abc123
 
+  cache:
+    redis:
+      time-to-live: 1800000 #设置缓存数据过期时间
   redis:
     database: 0
     host: localhost
